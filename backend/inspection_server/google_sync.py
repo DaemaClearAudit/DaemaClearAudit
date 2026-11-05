@@ -32,6 +32,18 @@ def rows(spreadsheet_id: str, sheet_range: str):
     return service('sheets', 'v4').spreadsheets().values().get(
         spreadsheetId=spreadsheet_id, range=sheet_range).execute().get('values', [])
 
+def photo_metadata(file_id, folder_id=None):
+    drive = service('drive', 'v3')
+    metadata = drive.files().get(fileId=file_id, fields='id,mimeType,size,parents', supportsAllDrives=True).execute()
+    mime = metadata.get('mimeType', '')
+    if mime not in {'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'}:
+        raise ValueError('지원하지 않는 사진 형식입니다')
+    if folder_id and folder_id not in metadata.get('parents', []):
+        raise ValueError('지정된 사진 폴더에 속하지 않습니다')
+    if int(metadata.get('size', '0')) > 15 * 1024 * 1024:
+        raise ValueError('사진 크기가 제한을 초과했습니다')
+    return metadata
+
 def photo(file_id):
     from googleapiclient.http import MediaIoBaseDownload
     import io

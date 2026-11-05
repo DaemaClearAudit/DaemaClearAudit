@@ -1,9 +1,10 @@
 import os
+from contextlib import asynccontextmanager
 import time
 from enum import Enum
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
@@ -12,9 +13,18 @@ load_dotenv()  # 프로젝트 루트의 .env 읽음
 
 MODEL = "gemini-2.5-flash"
 
-app = FastAPI(title="Automatic Cleaning Inspection")
+from inspection_server import store
+from inspection_server.api import authorize, now, router
 
-from inspection_server.api import router
+@asynccontextmanager
+async def lifespan(app):
+    # This MVP runs one worker. A previous process may have stopped mid-job.
+    with store.connection(write=True) as db:
+        db.execute("UPDATE jobs SET status='ERROR',updated_at=?,error=? WHERE status IN ('QUEUED','RUNNING')",
+                   (now(), '서버가 재시작되어 동기화가 중단되었습니다. 다시 실행하세요'))
+    yield
+
+app = FastAPI(title="Automatic Cleaning Inspection", lifespan=lifespan)
 app.include_router(router)
 
 
@@ -66,7 +76,7 @@ def health():
     return {"status": "ok", "api_key_loaded": bool(os.getenv("API_KEY"))}
 
 
-@app.post("/inspect")
+@app.post("/inspect", dependencies=[Depends(authorize)])
 async def inspect(file: UploadFile):
     result = inspect_photo(await file.read(), file.content_type or "image/jpeg")
     return {"verdict": result.verdict, "reason": result.reason}
