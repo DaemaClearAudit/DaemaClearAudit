@@ -5,3 +5,8 @@ __pycache__/
 .omc/
 
 .env
+
+backend/data/
+*.sqlite3
+credentials.json
+token.json

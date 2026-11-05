@@ -10,10 +10,12 @@ from pydantic import BaseModel
 
 load_dotenv()  # 프로젝트 루트의 .env 읽음
 
-client = genai.Client(api_key=os.getenv("API_KEY"))
 MODEL = "gemini-2.5-flash"
 
 app = FastAPI(title="Automatic Cleaning Inspection")
+
+from inspection_server.api import router
+app.include_router(router)
 
 
 class Verdict(str, Enum):
@@ -39,6 +41,7 @@ def inspect_photo(image_bytes: bytes, mime_type: str, retries: int = 2) -> Inspe
     last_err = None
     for attempt in range(retries + 1):
         try:
+            client = genai.Client(api_key=os.getenv("API_KEY"))
             resp = client.models.generate_content(
                 model=MODEL,
                 contents=[
