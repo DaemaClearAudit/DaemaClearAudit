@@ -3,3 +3,5 @@ uvicorn[standard]
 python-dotenv
 google-genai
 python-multipart
+google-api-python-client
+google-auth
