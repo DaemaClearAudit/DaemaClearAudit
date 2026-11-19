@@ -1,4 +1,5 @@
 import json
+import time
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -361,12 +362,8 @@ def validate_submissions(session_id: str, body: ValidateInput | None = None):
 
 # ---------------------------------------------------------------- F-04. AI 판독 실행 및 작업 조회
 
-@app.get("/api/v1/jobs/{job_id}")
-def get_job(job_id: str):
-    con = db.get_db()
+def serialize_job(con, job_id: str) -> dict:
     j = con.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
-    con.close()
-
     if not j:
         raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다.")
 
@@ -384,6 +381,25 @@ def get_job(job_id: str):
         "started_at": j["started_at"],
         "finished_at": j["finished_at"],
     }
+
+
+@app.get("/api/v1/jobs/{job_id}")
+def get_job(job_id: str, wait: int = 0):
+    timeout = min(max(wait, 0), 30)
+    deadline = time.monotonic() + timeout
+
+    while True:
+        con = db.get_db()
+        try:
+            result = serialize_job(con, job_id)
+        finally:
+            con.close()
+
+        if timeout == 0 or result["status"] in {"SUCCEEDED", "FAILED", "PARTIAL_FAILED"}:
+            return result
+        if time.monotonic() >= deadline:
+            return result
+        time.sleep(0.25)
 
 
 @app.post("/api/v1/sessions/{session_id}/process", status_code=202)
